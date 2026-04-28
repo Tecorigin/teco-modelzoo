@@ -37,4 +37,12 @@ jobs:
 
       # Run pre-commit on all files
       - name: Run pre-commit
-        run: pre-commit run --all-files --show-diff-on-failure
+        run: |
+          pre-commit migrate-config
+          pre-commit run --all-files --show-diff-on-failure
+      
+      # Run pre-commit on commit
+      - name: Run pre-commit on changed files
+        run: |
+          git fetch origin main --depth=1
+          git diff --name-only --diff-filter=ACMRT origin/main...HEAD | xargs -r pre-commit run --files
