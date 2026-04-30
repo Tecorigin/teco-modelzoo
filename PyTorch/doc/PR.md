@@ -151,11 +151,11 @@ Tecorign ModelZoo使用[TCAP\_DLLogger](https://github.com/Tecorigin/tcap_dllog
 
 * `argument.py`文件：用于解析统一运行接口的参数，例如：`model_name`、`batchsize`、`epoch`等。
   
-* `run_demo.py`文件：模型的运行脚本，启动脚本使用`os.system`或`subprocess`方法。
+* `run_<demo>.py`文件：模型的运行脚本，启动脚本使用`os.system`或`subprocess`方法 注意：这里的demo为模型名称。 
 
-* `loss.py`文件：执行CUDA和SDAA Loss对比，生成评估数据和Loss曲线对比图。
+* `loss.py`文件：可选，执行CUDA和SDAA Loss对比，生成评估数据和Loss曲线对比图，如果为长训，只需要提供CUDA与SDAA基准即可。
 
-* `test.sh`文件：对`loss.py`和`run_demo.py`的执行进行封装，快速运行模型和生成评估数据，便于模型验收。
+* `test.sh`文件：可选，对`loss.py`和`run_demo.py`的执行进行封装，快速运行模型和生成评估数据，便于模型验收。
 
 * 相关log文件：需提交复现的sdaa.log及cuda.log，便于模型验收与复现。
 
@@ -169,7 +169,7 @@ Tecorign ModelZoo使用[TCAP\_DLLogger](https://github.com/Tecorigin/tcap_dllog
 为降低使用成本，达到开箱即用，Tecorign ModelZoo所有模型基于Docker环境进行部署，Docker镜像环境使用dockerfile文件进行配置。提交模型时，您需要准备模型运行环境相关的dockerfile文件。
 
 关于dockerfile的详细信息，参考以下示例：
-- [TecoPaddle ResNet50 Dockerfile](https://github.com/Tecorigin/modelzoo/blob/main/PaddlePaddle/Classification/ResNet/Dockerfile)。
+
 - [TecoPaddle Bert Dockerfile](https://github.com/tecorigin/modelzoo/blob/main/PyTorch/NLP/BERT/Dockerfile)
 
 
