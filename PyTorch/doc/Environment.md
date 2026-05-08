@@ -23,5 +23,5 @@
 执行以下命令，下载仓库。
 
 ```
-git clone https://gitee.com/tecorigin/teco-modelzoo.git
+git clone https://github.com/Tecorigin/teco-modelzoo.git
 ```

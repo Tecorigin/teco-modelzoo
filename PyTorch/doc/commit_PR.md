@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-在完成模型开发及贡献模型所需文件后，您可以通过PR（Pull Request）将相应内容提交到Tecorigin ModelZoo仓库。
+在完成模型开发及贡献模型所需文件后，您可以通过PR（Pull Request）将相应内容提交到Tecorigin Teco-ModelZoo仓库。
 
 本文介绍提交PR前的检查工作以及如何创建PR信息。
 
@@ -20,7 +20,7 @@
 您已按照`<框架名>/contrib/<算法领域>/<模型名称>`格式创建目录，并将模型和相应文件放在该目录下。
 
 - 框架名：当前包括PyTorch或PaddlePaddle。请根据您的模型使用的训练框架进行选择。
-- 算法领域：当前有Classification、Detection、Face、GNN、NLP、Recommendation、Reinforcement、Segmentation、Speech，请您从中选择。如果所选模型不在上述列表中，可使用其他算法领域名称，并在[Issues](https://github.com/Tecorigin/modelzoo/issues)中对此进行说明。
+- 算法领域：当前有Classification、Detection、Face、GNN、NLP、Recommendation、Reinforcement、Segmentation、Speech，请您从中选择。如果所选模型不在上述列表中，可使用其他算法领域名称，并在[Issues](https://github.com/Tecorigin/teco-modelzoo/issues)中对此进行说明。
 - 模型名称：模型的名称。
 
 例如，ResNet模型的PyTorch版本提交的路径为: PyTorch/contrib/Classification/ResNet。
@@ -42,7 +42,7 @@
 
 - 训练运行文件：
   - 检查是否存在`run_scripts`文件夹。
-  - `run_scripts`目录下至少应当包括`argument.py`文件 和 `run_demo.py`文件。
+  - `run_scripts`目录下至少应当包括`argument.py`文件 和 `run_<模型名>.py`文件。
 
 - Dockerfile文件
 
@@ -57,20 +57,21 @@
     - 数据集文件请不要提交代码上传，github单文件最大限制100MB。
   - 启动训练的方法
   - 训练结果: 
-    - 如果为完整的训练或微调任务，请提供最终的metric结果。 
+    - 如果为完整的训练或微调任务，请提供最终的metric cuda/sdaa结果。 
     - 如果为短训，请提供loss曲线图和最终的loss结果。
 
 
 ## 3. 提交PR
 
-基于您Fork的个人空间的Tecorgin Modelzoo仓库，新建Pull Requests提交内容。关于如何Fork仓库及提交Pull Request，请查阅github官方使用文档：[Fork+PullRequest 模式](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)。
+基于您Fork的个人空间的Tecorgin Teco-Modelzoo仓库，新建Pull Requests提交内容。关于如何Fork仓库及提交Pull Request，请查阅github官方使用文档：[Fork+PullRequest 模式](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)。
 
 提交PR时注意以下事项：
 
 - 分支选择：
 
   - PR的源分支选择本地Tecorgin Modelzoo开发分支。为便于管理，建议您将分支名称命名为`contrib/<开发者团队名称>/<模型名称>`，例如：`contrib/jiangnan_university_ailab/deeplabv3`。
-  - 目标分支选择`tecorigin/modelzoo:main`。
+  
+  - 目标分支选择Tecorigin的`teco-modelzoo:main`。
 
 - PR标题：PR标题需要标注开发者团队名称及适配的内容，例如：**江南大学AILAB-在PyTorch框架上支持ResNet50在Imagenet上的训练**。
 - PR说明：PR说明应当包含以下内容。
