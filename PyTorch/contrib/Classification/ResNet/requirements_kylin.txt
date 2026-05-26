@@ -1,0 +1,5 @@
+git+https://gitee.com/sunny8654/dllogger.git
+pynvml
+pyyaml
+tensorboard
+git+https://gitee.com/tecorigin/tcap_dllogger.git
