@@ -89,7 +89,7 @@
 
 为明确代码版权及遵循相关开源协议，您需要在所有完全自主开发的代码文件和头文件内容最上方添加版权声明和开源许可License。
 
-Tecorign ModelZoo提供了C/C++和Python两种版本的License声明，请根据代码语言进行选择：
+Tecorigin ModelZoo提供了C/C++和Python两种版本的License声明，请根据代码语言进行选择：
 
 **说明**：如果原代码文件已有第三方版权声明，为减轻工作量，您可以直接在原文件基础上添加如下声明：``//Adapted to tecorigin hardware``或``# Adapted to tecorigin hardware``。
 

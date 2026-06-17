@@ -133,7 +133,7 @@ class TecoInferEngine(Engine):
 
     def _init_trt_model(self, *args, **kwargs):
         """
-        init trt model from enging or onnx
+        init trt model from engine or onnx
         """
         try:
             import tensorrt as trt
@@ -224,7 +224,7 @@ class TecoInferEngine(Engine):
             engine = runtime.deserialize_cuda_engine(engine_bytes)
 
         if save:
-            print(f"enging saving to {f}")
+            print(f"engine saving to {f}")
             with open(f, 'wb') as t:
                 t.write(engine_bytes)
 

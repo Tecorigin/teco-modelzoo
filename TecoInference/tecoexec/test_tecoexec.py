@@ -30,7 +30,7 @@ import time
 from typing import Dict
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 sys.path.append(str(Path(__file__).resolve().parents[0]))
-from save_engine import SaveEengine, onnx
+from save_engine import SaveEngine, onnx
 from benchmark_tools.teco_unittest import TecoUnittest as TestCase
 from benchmark_tools.teco_unittest import TecoTestsMetaCommon
 from benchmark_tools.common.wrapper import run_table
@@ -167,7 +167,7 @@ class TestTecoexec(TestCase, metaclass=TecoTestsMetaCommon):
                 self.input_shapes = ",".join(shapes_tecoexec)    # for tecoexec
                 self.input_shapes_ = [eval(f"[{s.replace('*', ',')}]") for s in shapes_engine] # for build engine
 
-                _ = SaveEengine(onnx_path=self.onnx_path,
+                _ = SaveEngine(onnx_path=self.onnx_path,
                                    pass_path=self.pass_path,
                                    save_path=self.tecoengine_path,
                                    dtype=self.onnx_dtype,
@@ -178,7 +178,7 @@ class TestTecoexec(TestCase, metaclass=TecoTestsMetaCommon):
                 self.run_cmd()
         else:
             self.bs = self.batch_size
-            _ = SaveEengine(onnx_path=self.onnx_path,
+            _ = SaveEngine(onnx_path=self.onnx_path,
                                    pass_path=self.pass_path,
                                    save_path=self.tecoengine_path,
                                    dtype=self.onnx_dtype).save()

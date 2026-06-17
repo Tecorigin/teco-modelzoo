@@ -84,7 +84,7 @@ def topological_sorting(onnx_model: onnx.ModelProto):
     graph.ClearField("node")
     graph.node.extend(sorted_nodes)
 
-class SaveEengine:
+class SaveEngine:
     def __init__(self,
                  onnx_path,
                  dtype='float16',
@@ -195,7 +195,7 @@ if __name__ == '__main__':
     parser.add_argument('--onnx_dtype', default='float16')
     args = parser.parse_args()
     
-    SaveEengine(onnx_path=args.onnx_path,
+    SaveEngine(onnx_path=args.onnx_path,
                 pass_path=args.pass_path,
                 save_path=args.save_path,
                 dtype=args.onnx_dtype).save()
