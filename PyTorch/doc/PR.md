@@ -8,9 +8,9 @@
 
 - 准备模型训练代码：在模型训练代码中添加注释和License，以及统一日志接口。
 - 准备训练启动文件：创建模型训练代码的启动脚本。Tecorgin ModelZoo使用统一的规则启动模型训练，从而降低开发者的使用成本。
-- 准备dockerfile文件：创建dockerfile文件，用于构建模型训练所需的Docker环境。
+- (可选) 准备dockerfile文件：创建dockerfile文件，用于构建模型训练所需的Docker环境。
 - 准备`requirements.txt`文件：创建`requirements.txt`文件，用于安装运行模型所需的第三方依赖。
-- 准备Readme文件：编写Readme文件，介绍如何使用模型进行训练。
+- 准备Readme文件：编写README.md文件，介绍如何使用模型进行训练。
 
 
 ## 2. 准备模型训练代码
@@ -97,7 +97,7 @@
     ```
   - Python：
     ```
-    # Adapted to tecorigin hardware。
+    # Adapted to tecorigin hardware
     ```
 
 
@@ -158,7 +158,7 @@ Tecorigin ModelZoo使用[TCAP\_DLLogger](https://github.com/Tecorigin/tcap_dllo
     
 
 
-## 4. 准备dockerfile文件
+## 4. (可选) 准备dockerfile文件
 
 为降低使用成本，达到开箱即用，Tecorigin ModelZoo所有模型基于Docker环境进行部署，Docker镜像环境使用dockerfile文件进行配置。提交模型时，您需要准备模型运行环境相关的dockerfile文件。
 

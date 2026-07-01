@@ -44,9 +44,9 @@
   - 检查是否存在`run_scripts`文件夹。
   - `run_scripts`目录下至少应当包括`argument.py`文件 和 `run_<模型名>.py`文件。
 
-- Dockerfile文件
+- Dockerfile文件：(可选)
 
-- Requirement文件
+- Requirement文件：
 
 - Readme文件：检查是否已经包含模型使用的Readme文件，且文件至少包含以下内容说明：    
   - 模型概述
@@ -57,7 +57,7 @@
     - 数据集文件请不要提交代码上传，github单文件最大限制100MB。
   - 启动训练的方法
   - 训练结果: 
-    - 如果为完整的训练或微调任务，请提供最终的性能/metric cuda/sdaa结果。 
+    - 如果为完整的训练或微调任务，请提供最终的 性能/metric cuda/sdaa结果。 
     - 如果为短训，请提供loss曲线图和最终的loss结果。
 
 
