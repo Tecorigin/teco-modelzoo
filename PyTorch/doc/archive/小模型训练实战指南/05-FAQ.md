@@ -36,7 +36,7 @@ T1芯片卡内device的通信效率远大于卡间device的通信效率，如果
 
 ## 5. teco-smi显示的占用的进程PID为什么和ps命令显示的PID不一致？
 
-当前Tecorign ModelZoo提供给用户的是Docker环境，在Docker内部，`teco-smi`显示的进程是宿主机上的进程，`ps`显示的是Docker内部的进程。如果使用`kill`命令，需要输入Docker内部的进程。  
+当前Tecorigin ModelZoo提供给用户的是Docker环境，在Docker内部，`teco-smi`显示的进程是宿主机上的进程，`ps`显示的是Docker内部的进程。如果使用`kill`命令，需要输入Docker内部的进程。  
 
 
 ## 6. 使用TecoSMI查看加速卡硬件信息时，Volatile SPE-Util列为N/A，如何处理？

@@ -57,7 +57,7 @@
     - 数据集文件请不要提交代码上传，github单文件最大限制100MB。
   - 启动训练的方法
   - 训练结果: 
-    - 如果为完整的训练或微调任务，请提供最终的metric cuda/sdaa结果。 
+    - 如果为完整的训练或微调任务，请提供最终的性能/metric cuda/sdaa结果。 
     - 如果为短训，请提供loss曲线图和最终的loss结果。
 
 
@@ -85,4 +85,4 @@
      * 如果为短训，请提供loss曲线图和最终的loss结果。
    * Readme自测结果：确定Readme已经通过自测，非开发者可以通过Readme运行模型训练。
 
-PR提交的具体示例，请参考以下示例：[https://github.com/Tecorigin/modelzoo/pull/9](https://github.com/Tecorigin/modelzoo/pull/9)    
+PR提交的具体示例，请参考以下示例：[pull/9](https://github.com/Tecorigin/modelzoo/pull/9)    
