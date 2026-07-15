@@ -153,7 +153,7 @@ Tecorigin ModelZoo使用[TCAP\_DLLogger](https://github.com/Tecorigin/tcap_dllo
   
 * `run_<demo>.py`文件：模型的运行脚本，启动脚本使用`os.system`或`subprocess`方法 注意：这里的demo为模型名称。
    
-* `test.sh`文件：模型的运行命令封装，执行该脚本即可前端输出相关log信息，便于验收。 
+* `test.sh`文件：模型的运行命令封装，需在run_scripts下执行该文件，即可前端输出相关log信息，便于验收。 
 
 关于`run_scripts`的详细信息，参考以下示例：[ResNet50/run_scripts](../contrib/Classification/ResNet/run_scripts)
     
