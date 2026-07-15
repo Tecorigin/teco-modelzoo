@@ -159,7 +159,7 @@ Tecorigin ModelZoo使用[TCAP\_DLLogger](https://github.com/Tecorigin/tcap_dllo
     
 
 
-## 4. (可选/非必要) 准备dockerfile文件
+## 4. (可选/非必须) 准备dockerfile文件
 
 为降低使用成本，达到开箱即用，Tecorigin ModelZoo所有模型基于Docker环境进行部署，Docker镜像环境使用dockerfile文件进行配置。提交模型时，您需要准备模型运行环境相关的dockerfile文件。
 
