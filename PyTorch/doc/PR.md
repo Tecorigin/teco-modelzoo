@@ -8,9 +8,9 @@
 
 - 准备模型训练代码：在模型训练代码中添加注释和License，以及统一日志接口。
 - 准备训练启动文件：创建模型训练代码的启动脚本。Tecorgin ModelZoo使用统一的规则启动模型训练，从而降低开发者的使用成本。
-- (可选) 准备dockerfile文件：创建dockerfile文件，用于构建模型训练所需的Docker环境。
+- (可选/非必须) 准备dockerfile文件：创建dockerfile文件，用于构建模型训练所需的Docker环境。
 - 准备`requirements.txt`文件：创建`requirements.txt`文件，用于安装运行模型所需的第三方依赖。
-- 准备Readme文件：编写README.md文件，介绍如何使用模型进行训练。
+- 准备README文件：编写README.md文件，介绍如何使用模型进行训练。
 
 
 ## 2. 准备模型训练代码
@@ -151,14 +151,15 @@ Tecorigin ModelZoo使用[TCAP\_DLLogger](https://github.com/Tecorigin/tcap_dllo
 
 * `argument.py`文件：用于解析统一运行接口的参数，例如：`model_name`、`batchsize`、`epoch`等。
   
-* `run_<demo>.py`文件：模型的运行脚本，启动脚本使用`os.system`或`subprocess`方法 注意：这里的demo为模型名称。 
+* `run_<demo>.py`文件：模型的运行脚本，启动脚本使用`os.system`或`subprocess`方法 注意：这里的demo为模型名称。
+   
+* `test.sh`文件：模型的运行命令封装，执行该脚本即可前端输出相关log信息，便于验收。 
 
-
-关于`run_scripts`的详细信息，参考以下示例：[ResNet50 run_scripts](../contrib/Classification/ResNet/run_script)
+关于`run_scripts`的详细信息，参考以下示例：[ResNet50/run_scripts](../contrib/Classification/ResNet/run_script)
     
 
 
-## 4. (可选) 准备dockerfile文件
+## 4. (可选/非必要) 准备dockerfile文件
 
 为降低使用成本，达到开箱即用，Tecorigin ModelZoo所有模型基于Docker环境进行部署，Docker镜像环境使用dockerfile文件进行配置。提交模型时，您需要准备模型运行环境相关的dockerfile文件。
 
@@ -173,21 +174,21 @@ Tecorigin ModelZoo使用[TCAP\_DLLogger](https://github.com/Tecorigin/tcap_dllo
 
 以TecoPytorch框架训练的ResNet50模型为例，其[`requirements.txt`](../contrib/Classification/ResNet/requirements.txt)内容如下：
 ```
-git+https://gitee.com/sunny8654/dllogger.git
 pynvml==11.0.0
 mkl==2022.1.0
 pyyaml
 tensorboard
+git+https://gitee.com/Asuraa/dllogger.git
 git+https://github.com/Tecorigin/tcap_dllogger.git
 ```
 
-## 6. 准备Readme文件
+## 6. 准备README文件
 
-Readme文件用于介绍模型的功能、环境依赖、数据集、使用方法、性能、精度等信息。README文件应包含如下内容：
+README文件用于介绍模型的功能、环境依赖、数据集、使用方法、性能、精度等信息。README.md文件应包含如下内容：
 
 * 模型概述：介绍模型，包含模型的来源和算法说明。
   
-* Docker环境准备：包括准备基础环境、创建当前模型的Docker镜像、创建当前模型Docker容器和启动当前模型Docker容器等。
+* Docker环境准备（非必须）：包括准备基础环境、创建当前模型的Docker镜像、创建当前模型Docker容器和启动当前模型Docker容器等。
   
 * 数据集：数据集获取及数据集处理方法。如果使用开源数据集或权重，提供开源获取方式和数据处理方法。如果使用非开源数据集或权重，请提供百度网盘下载链接和数据处理方法，数据集文件请不要提交代码上传，github单文件最大限制100MB。
   
