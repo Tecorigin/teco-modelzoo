@@ -1,3 +1,3 @@
 # Detection
 
-该目录用来提交Deformable-DETR模型[PyTorch/contrib/Detection/Deformable-DETR]
+该目录用来提交Deformable-DETR模型: [PyTorch/contrib/Detection/Deformable-DETR]
