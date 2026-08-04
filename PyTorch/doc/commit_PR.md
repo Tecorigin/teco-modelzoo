@@ -25,6 +25,8 @@
 
 例如，ResNet模型的PyTorch版本提交的路径为: PyTorch/contrib/Classification/ResNet。
 
+适配的模型请按照：PyTorch/contrib/Detection/Deformable-DETR 放置
+
 ### 2.2 优化代码
 
 提交PR之前，请完整检查代码，确认是否有可以进一步优化的代码（例如：删除无关的代码等），从而让代码变得更优雅。
