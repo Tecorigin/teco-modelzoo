@@ -48,7 +48,7 @@
 
 - Dockerfile文件：(可选/非必要)
 
-- Requirement文件：
+- Requirement文件：requirements.txt
 
 - Readme文件：检查是否已经包含模型使用的Readme文件，且文件至少包含以下内容说明：    
   - 模型概述
