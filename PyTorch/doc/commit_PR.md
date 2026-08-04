@@ -65,7 +65,7 @@
 
 ## 3. 提交PR
 确保teco-ops仓库合入并测试通过自定义算子且能正常调用，
-完成所有模型测试并通过后，请将模型代码提交到 每个队伍的 Teco-ModelZoo 仓库。
+完成所有模型测试并通过后，请将模型代码提交到 Teco-ModelZoo 仓库。
 <!--
 以下内容不适用本地比赛，所以隐藏
 基于您Fork的个人空间的Tecorgin Teco-Modelzoo仓库，新建Pull Requests提交内容。关于如何Fork仓库及提交Pull Request，请查阅github官方使用文档：[Fork+PullRequest 模式](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork)。
