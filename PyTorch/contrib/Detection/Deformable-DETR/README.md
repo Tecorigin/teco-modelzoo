@@ -8,7 +8,7 @@
 - **模型来源**：`Tecorigin/Deformable-DETR @ 1bda1f956a326d2601302413e4618c0fd109e799`（Apache-2.0），
   保留原网络、损失、数据增强与版权声明；来源与文件哈希见 [SOURCE.json](SOURCE.json)。
 - **算子**：`MSDeformAttn` 的多尺度可变形注意力由**本队开发的 C++ 算子**提供
-  （`tecoops.ms_deform_attn` 前向 + 配对的一阶反向，见 Teco-Ops 提交仓 main `e4e691d2b1915b0744ca0a1119fd6d79d2112cab`），
+  （`tecoops.ms_deform_attn` 前向 + 配对的一阶反向，见 Teco-Ops 提交仓 main `beebae220f0e918460d2210e4064030e157d602d`），
   通过 `models/ops/_tecoops_binding.py` 在**导入期一次绑定**（热路径零分支、零 `getenv`）。
   缺包 / 缺原生对象 / 缺入口一律 **fail-closed**，**不回退**到 CPU 或 torch 实现。
 - **单卡形态**：本入口为**单进程单卡**（`--gpu 0` 语义由运行环境决定）；太初卡为**单卡四核组**结构，
@@ -71,7 +71,7 @@ export MODEL_ROOT=/root/competition-assets/deformable-detr-voc2007-20260717/payl
 "$PYTHON" -m pip install tecoops-0.0.0-cp3xx-cp3xx-linux_loongarch64.whl
 ```
 
-`tecoops` whl 由**提交的算子仓 main `e4e691d2b1915b0744ca0a1119fd6d79d2112cab`**（= 上一版 pin
+`tecoops` whl 由**提交的算子仓 main `beebae220f0e918460d2210e4064030e157d602d`**（= 上一版 pin
 `79941c5`（= `4adfd05e`（含 `459992a2` + Deformable value-leaf stage-1 `2f3a7735` + 团队融合 NeoX RoPE
 `9fba48c` 的 merge 与 Hy 真实 shape 用例）+ 7 个纯增量 CI 测试件 `dda33c5b` +
 `ms_deform_attn_forward` per-value-plane 整块搬运 `79941c5`）
@@ -90,7 +90,7 @@ export MODEL_ROOT=/root/competition-assets/deformable-detr-voc2007-20260717/payl
 | cp312 | 3,401,412 | `7ae859dcda1b03ccdeb64b05858ced1c9656bb26d97802016910a6f6334dc425` | `5c267322c1ee1a83a65fed748eb58fdc0b57f186336624b26b484daacfb11675` | `e7722cbcdb2b0eb83859bc210a7892f1ac41ff836c4d9ce5401843b15e5b9304` |
 | cp311 | 3,183,712 | `5c38e5e816bde3841d0269dc22d90bc38bd8231df62ac4eed24565603ef9dc5f` | `12c03c922ddf28b3bb2e7d051a30787469e061b6038b9d7a1405d2d5596d2a6f` | `d8b30e7ba21ae1624a7819c6bed6f2d1b3f35577712ce8aed83be4bef30dd493` |
 
-> 本次 pin 前进至 `e4e691d2b1915b0744ca0a1119fd6d79d2112cab` 仅涉及注释与测试（kernel 只新增 BSD 3-Clause 头、`python_api_test` gate 为测试侧改动），故 whl 指纹表仍是 `54a1d65` 侧的实测记录，本窗口未重建任何 whl。
+> 本次 pin 前进至 `beebae220f0e918460d2210e4064030e157d602d` 仅涉及注释与测试（kernel 只新增 BSD 3-Clause 头、`python_api_test` gate 为测试侧改动），故 whl 指纹表仍是 `54a1d65` 侧的实测记录，本窗口未重建任何 whl。
 >
 > pin 以**源码 commit + whl 指纹**为准，**不以 core lib 字节为准**：`libteco_ops.so` 的字节随
 > build root 变化，跨 build 的差值不作结论。whl 不随 git 提交。历史沿革：更早的实测曾用
@@ -193,7 +193,7 @@ ModelZoo 仅提供公共数据集的下载链接。这些公共数据集不属�
 请在 Github/Gitee 中提交 issue，我们将根据您的 issue 删除或更新您的数据集。衷心感谢您对我们社区的理解和贡献。
 
 > **2026-10-14 cycle-25 第五次 pin 前进（本段为本轮新增）**：提交的算子仓 main 从 `98e18ca2f124fdcf540b661d932d9a9940f4dba7`
-> 前进到 **`e4e691d2b1915b0744ca0a1119fd6d79d2112cab`**。**与上一次（98e18ca，纯注释/测试）不同，本次包含真实的 kernel 改动**：
+> 前进到 **`beebae220f0e918460d2210e4064030e157d602d`**。**与上一次（98e18ca，纯注释/测试）不同，本次包含真实的 kernel 改动**：
 > `flash_attention` 的 NT-form score GEMM 扩到 `BM==128`，并让 scale / causal-mask /
 > online-softmax 直接在转置后的分数 tile 上求值（消掉 `S^T→S` flip），`<128>` 实例化移入
 > 尾部设备 TU `teco/ual/kernel/zzz_flash_attention_d128/zzz_flash_attention_d128.scpp`
@@ -203,4 +203,22 @@ ModelZoo 仅提供公共数据集的下载链接。这些公共数据集不属�
 > `docs/competition/c25-lead-ledger-20261014.md`）。
 > **⚠ 复现须知**：本前方的 `whl` 指纹表（cp312 `7ae859dc…` / cp311 `5c38e5e8…` 等）
 > 是 `54a1d65`/`98e18ca` 侧的实测记录，**不再对应当前 main**；本窗口**未重建任何 whl**。
-> 复现者必须按本 pin（`e4e691d2b1915b0744ca0a1119fd6d79d2112cab`）的源码重新 `setup.py build_ext --inplace` 并重建 wheel 后再运行。
+> 复现者必须按本 pin（`beebae220f0e918460d2210e4064030e157d602d`）的源码重新 `setup.py build_ext --inplace` 并重建 wheel 后再运行。
+
+> **2026-10-14 cycle-26 第六次 pin 前进（本段为本轮新增）**：提交的算子仓 main 从 `e4e691d2b1915b0744ca0a1119fd6d79d2112cab`
+> 前进到 **`beebae220f0e918460d2210e4064030e157d602d`**。本次**只改 host 侧谓词**：`weight_stream_gemv`
+> 的快路径准入条件由 `n % 256 == 0` 放宽为 **`n % 64 == 0`**（`api/torch_ext.cpp` +
+> `teco/interface/ops/weight_stream_gemv.cpp`，2 路径 +10/−5）。依据是引擎自身的 DMA 校验器：它对
+> **地址与 size 都只要求 4 B 对齐**（`libadd_bc.a::memcpy_check.bc` 的 IR 对 src/dst/size 三者都 `& 3`；
+> `teco_hal_tile.hpp` 亦自带「DMA 4 字节对齐校验（针对 half）」的 assert），而 `my_rows = n/32`、
+> flush `y_bytes = 2*my_rows` ⇒ 4 B 对齐恰好等价于 `n % 64 == 0`；旧注释里的「16 B aligned」不成立。
+> **同 build root 逐 object 对照：49 个 `.o` 中只有 `interface/ops/weight_stream_gemv.cpp.o` 变化，
+> 全部 `ual/kernel/**/*.scpp.o` 逐字节不变** ⇒ 本模型的 `ms_deform_attn`（forward plane/span、
+> backward list/gather）**device 目标码未动**，其已记录的算子级收益与官方 `case_0` 结果不受影响。
+> 收益落在 InternVL3_5-8B 线（其 TP=2 lm_head `N = 75968 = 64 × 1187` 首次进入快路径：同窗清册
+> `fb_align 92 → 0`/rank、模型级文本 32-token 中位 **+11.787%**）；DETR 不绑定该算子。
+> **Lead 独立验收（本 pin）**：官方全表 **39/39 ALL PASSED**（39 例 `max_error` 与 `e4e691d` 基线逐位相同）。**夹具缺陷已于 2026-10-14 修复**：此前记录的
+> `causal_conv1d case_0/case_1` 的 `TECOTEST_STATUS_FILE_OPEN_FAULT` 根因是 **demo 内置 python3.11 的 torch↔numpy 桥在本机损坏**（`Failed to initialize NumPy: module 'numpy._globals' has no attribute '_signature_descriptor'`），demo 因此永远生成不了缺失的 `cpu_output_*`，而回退分支的路径推导（`test/src/suite/executor.cpp:1575`）在从 `<ops>/test` 跑 demo 时又解析到不存在的 `<ops>/zoo/...`；修法是先用**厂商 python 3.12** 跑该 op 自带的生成器预生成参考（`TREE=<tree> OP=causal_conv1d bash /root/tmpwork/c16/gen_cpu_ref_all.sh`），并把生成的 `cpu_output_*` 放进参考银行供 `seed_refs.sh` 在所有树上复用。修复后该两例 `max_error 0.00000e+00`、AHT 12.42 / 24.249 ms。**此前 37 PASSED 的表述随之作废。**
+> **⚠ 复现须知**：前方的 whl 指纹表仍是 `54a1d65`/`98e18ca` 侧的实测记录，**不对应当前 main**；
+> 本窗口**未重建任何 whl**。复现者必须按本 pin（`beebae220f0e918460d2210e4064030e157d602d`）的源码
+> 重新 `setup.py build_ext --inplace` 并重建 wheel 后再运行。

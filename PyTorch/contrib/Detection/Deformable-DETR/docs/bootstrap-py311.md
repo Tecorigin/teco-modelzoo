@@ -39,7 +39,7 @@ export PYTHON=/home/py312/bin/python    # 本队厂商环境（默认值）
 2. **安装配对的原生 `tecoops` whl（必需）**：从**提交的算子仓 main** 的源码用该解释器构建原生前向 +
    一阶反向扩展并打包：
    ```bash
-   # 在**提交的算子仓 main `e4e691d2b1915b0744ca0a1119fd6d79d2112cab`** 的 checkout 内
+   # 在**提交的算子仓 main `beebae220f0e918460d2210e4064030e157d602d`** 的 checkout 内
    # （= 上一版 pin `79941c5`（= `4adfd05e`（`459992a2` + Deformable value-leaf stage-1 `2f3a7735` + 团队 fused NeoX RoPE
    #  `9fba48c` 的 merge（`d816f17`）+ Hy 真实 shape 用例）+ 7 个纯增量 CI 测试件 `dda33c5b`
    #  + `ms_deform_attn_forward` per-value-plane 整块搬运；父提交可复核；已含
@@ -54,7 +54,9 @@ export PYTHON=/home/py312/bin/python    # 本队厂商环境（默认值）
    WITH_TORCH=ON WITH_INFERENCE_PLUGIN=OFF "$PYTHON" setup.py bdist_wheel
    "$PYTHON" -m pip install dist/tecoops-<version>-cp3xx-cp3xx-linux_loongarch64.whl
    # 本队实测指纹（cp312 `7ae859dc` 3,401,412 B / cp311 `5c38e5e8` 3,183,712 B）见 ../README.md
-   # 本次 pin 前进至 `e4e691d2b1915b0744ca0a1119fd6d79d2112cab` 仅涉及注释与测试（kernel 只新增 BSD 3-Clause 头、`python_api_test` gate 为测试侧改动），故 whl 指纹表仍是 `54a1d65` 侧的实测记录，本窗口未重建任何 whl。
+   # 本次 pin 已前进至 `beebae220f0e918460d2210e4064030e157d602d`（cycle-26：weight_stream_gemv 的 host 谓词
+   # `n % 256 == 0` → `n % 64 == 0`，只改 host、device 目标码逐字节不变），
+   # 故 whl 指纹表仍是 `54a1d65`/`98e18ca` 侧的实测记录，本窗口未重建任何 whl。
    ```
    模型侧通过 `models/ops/_tecoops_binding.py` 在**导入期一次绑定** `tecoops`；缺包即 fail-closed，
    不会回退到 torch 实现。`TECOOPS_API_ROOT` **不再必需**，仅作为源码树开发态的可选覆盖
@@ -127,7 +129,7 @@ bash run_scripts/verify_native_voc.sh --output /dev/shm/voc-native-focused.json
   py3.11 复跑结论，两者需分别记录。
 
 > **2026-10-14 cycle-25 第五次 pin 前进（本段为本轮新增）**：提交的算子仓 main 从 `98e18ca2f124fdcf540b661d932d9a9940f4dba7`
-> 前进到 **`e4e691d2b1915b0744ca0a1119fd6d79d2112cab`**。**与上一次（98e18ca，纯注释/测试）不同，本次包含真实的 kernel 改动**：
+> 前进到 **`beebae220f0e918460d2210e4064030e157d602d`**。**与上一次（98e18ca，纯注释/测试）不同，本次包含真实的 kernel 改动**：
 > `flash_attention` 的 NT-form score GEMM 扩到 `BM==128`，并让 scale / causal-mask /
 > online-softmax 直接在转置后的分数 tile 上求值（消掉 `S^T→S` flip），`<128>` 实例化移入
 > 尾部设备 TU `teco/ual/kernel/zzz_flash_attention_d128/zzz_flash_attention_d128.scpp`
@@ -137,4 +139,4 @@ bash run_scripts/verify_native_voc.sh --output /dev/shm/voc-native-focused.json
 > `docs/competition/c25-lead-ledger-20261014.md`）。
 > **⚠ 复现须知**：本前方的 `whl` 指纹表（cp312 `7ae859dc…` / cp311 `5c38e5e8…` 等）
 > 是 `54a1d65`/`98e18ca` 侧的实测记录，**不再对应当前 main**；本窗口**未重建任何 whl**。
-> 复现者必须按本 pin（`e4e691d2b1915b0744ca0a1119fd6d79d2112cab`）的源码重新 `setup.py build_ext --inplace` 并重建 wheel 后再运行。
+> 复现者必须按本 pin（`beebae220f0e918460d2210e4064030e157d602d`）的源码重新 `setup.py build_ext --inplace` 并重建 wheel 后再运行。
