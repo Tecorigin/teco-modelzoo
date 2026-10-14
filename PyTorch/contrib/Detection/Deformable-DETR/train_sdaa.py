@@ -65,11 +65,38 @@ from datasets import build_dataset, get_coco_api_from_dataset
 from engine import evaluate
 import util.misc as utils
 import tecoops
-from tcap_dllogger import Logger, JSONStreamBackend, Verbosity
+from tcap_dllogger import Logger, StdOutBackend, JSONStreamBackend, Verbosity
 
 FORMAT = "scu-voc-sdaa-training-v1"
 OFFICIAL_COMMIT = "1bda1f956a326d2601302413e4618c0fd109e799"
 
+
+# ---------------------------------------------------------------------------
+# Organizer TCAP stdout logging (single core-group view).
+#
+# The Tecorigin card is ONE card made of FOUR core groups (单卡四核组), which is
+# why the r50 reference passes `--nproc_per_node 4`.  The organizer requires the
+# TCAP metrics in SINGLE-CORE-GROUP terms, so the conversion is
+#
+#     bs_per_core_group  = bs_aggregate  / SDAA_CORE_GROUPS
+#     ips_per_core_group = ips_aggregate / SDAA_CORE_GROUPS      [imgs/s]
+#
+# and `train.loss` is a per-image mean, i.e. identical in both views (stated
+# rather than divided).  Every step logs BOTH rows: the per-core-group row is
+# primary, the aggregate row follows on the same step as a cross-check.
+SDAA_CORE_GROUPS = 4
+
+
+def tcap_stdout_prefix(rank, timestamp):
+    """Organizer front-end marker: ``TCAPDLL <timestamp> - `` (task-15 sample format).
+
+    The vendored tcap_dllogger default prefix is ``TCAPPDLL`` (logger.py
+    ``default_prefix_format``), while the organizer's expected front-end line is
+    ``TCAPDLL ...``.  stdout must match the organizer's example, so an explicit
+    prefix_format is passed to StdOutBackend; the JSON stream keeps the tool's own
+    marker and the vendored ``tcap_dllogger/`` package is not modified.
+    """
+    return "TCAPDLL {} - ".format(timestamp)
 
 def sha256(path):
     h = hashlib.sha256()
@@ -243,10 +270,21 @@ def main(args):
     output.mkdir(parents=True, exist_ok=True)
     if shutil.disk_usage(output).free < 2 * 1024**3:
         raise OSError("at least 2 GiB free output space is required for atomic checkpoints")
-    logger = Logger([JSONStreamBackend(Verbosity.VERBOSE, str(output / "sdaa.log"), append=False)])
-    for name, unit, stage in (("train.loss", "", "TRAIN"), ("train.ips", "imgs/s", "TRAIN"),
-                              ("val.loss", "", "VAL"), ("val.ips", "imgs/s", "VAL")):
-        logger.metadata(name, {"unit": unit, "STAGE": stage})
+    # StdOutBackend MUST come first: the organizer's acceptance reads the front-end
+    # TCAP lines from `bash run_scripts/test.sh` stdout; the JSON stream is only a
+    # by-product (r50 order, PyTorch/contrib/Classification/ResNet/.../tcap_logger.py).
+    logger = Logger([StdOutBackend(Verbosity.DEFAULT, prefix_format=tcap_stdout_prefix),
+                     JSONStreamBackend(Verbosity.VERBOSE, str(output / "sdaa.log"), append=False)])
+    # fail-closed: never continue without a verifiable stdout backend, otherwise the
+    # organizer's front-end log is silently missing again.
+    if not any(isinstance(b, StdOutBackend) for b in logger.backends):
+        raise RuntimeError("TCAP fail-closed: StdOutBackend is not in the logger backend list")
+    for name, unit, stage, goal in (("train.loss", "", "TRAIN", "MINIMIZE"),
+                                    ("train.ips", "imgs/s", "TRAIN", "MAXIMIZE"),
+                                    ("bs", "", "TRAIN", "MAXIMIZE"),
+                                    ("val.loss", "", "VAL", "MINIMIZE"),
+                                    ("val.ips", "imgs/s", "VAL", "MAXIMIZE")):
+        logger.metadata(name, {"unit": unit, "STAGE": stage, "GOAL": goal})
     assets = {"pretrained_sha256": sha256(pretrained),
               "train_json_sha256": sha256(Path(args.coco_path) / "train/train.json"),
               "val_json_sha256": sha256(Path(args.coco_path) / "val/val.json")}
@@ -320,6 +358,7 @@ def main(args):
             step_started = time.monotonic()
             for samples, targets in loader:
                 before = dict(counts) if counts is not None else None
+                iter_started = time.monotonic()
                 ids = [int(target["image_id"].item()) for target in targets]
                 input_shape = list(samples.tensors.shape)
                 samples = samples.to(device)
@@ -348,8 +387,25 @@ def main(args):
                        "image_ids": ids, "input_shape": input_shape, "loss": last_loss,
                        "grad_norm": grad_norm, "lr": [g["lr"] for g in optimizer.param_groups],
                        "elapsed_seconds": time.monotonic() - started}
-                logger.log(step=(epoch, global_step), data={"rank": 0, "bs": args.batch_size,
-                    "train.loss": last_loss, "train.ips": args.batch_size / (time.monotonic() - step_started)})
+                # Per-iteration TCAP row, SINGLE core-group view (organizer requirement):
+                #   bs_cg  = batch_size / SDAA_CORE_GROUPS
+                #   ips_cg = (batch_size / iter_seconds) / SDAA_CORE_GROUPS   [imgs/s]
+                # train.loss is a per-image mean, so it is the same in both views.
+                # verbosity=Verbosity.DEFAULT is required: Logger.log defaults to
+                # VERBOSE(1) while the r50 StdOutBackend uses DEFAULT(0), so 0 >= 1 would
+                # silently drop the front-end line (this is exactly the organizer's bug).
+                iter_seconds = max(time.monotonic() - iter_started, 1e-9)
+                ips_aggregate = args.batch_size / iter_seconds
+                logger.log(step=(epoch, global_step),
+                           data={"rank": 0, "bs": args.batch_size / SDAA_CORE_GROUPS,
+                                 "train.loss": last_loss,
+                                 "train.ips": ips_aggregate / SDAA_CORE_GROUPS},
+                           verbosity=Verbosity.DEFAULT)
+                # Same step, aggregate (whole single card) row as the cross-check.
+                logger.log(step=(epoch, global_step),
+                           data={"rank": 0, "scope": "aggregate", "bs": args.batch_size,
+                                 "train.loss": last_loss, "train.ips": ips_aggregate},
+                           verbosity=Verbosity.DEFAULT)
                 if counts is not None:
                     row["native_calls"] = {k: counts[k] - before[k] for k in counts}
                     if row["native_calls"] != {"forward": 12, "backward": 12}:
@@ -423,7 +479,8 @@ def evaluate_model(model, criterion, postprocessors, dataset, args, device, outp
         # from changing the subsequent training augmentation sequence.
         restore_rng(saved_rng)
     logger.log(step="evaluation", data={"rank": 0, "val.loss": stats["loss"],
-                                       "val.ips": count / (time.monotonic() - started)})
+                                       "val.ips": count / (time.monotonic() - started)},
+               verbosity=Verbosity.DEFAULT)  # DEFAULT so the val row also reaches stdout
     result = {"images": count, "full_test": count == 4952, "stats": stats}
     atomic_json(output / name, result)
     return result

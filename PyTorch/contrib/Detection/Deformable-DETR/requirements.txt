@@ -22,6 +22,18 @@
 #     git+https://github.com/Tecorigin/tcap_dllogger.git@6997d7d15b1b23e9000f9e5c5cd7536b6e1b299e
 # is replaced by the vendored copy.  Use it offline; never fetch it at install time.
 #
+# PyTorch/doc/PR.md §2.2 asks for the following line when tcap_dllogger is used.
+# It is satisfied by the vendored pinned copy described above rather than by a
+# network fetch at install time.  TWO supported paths (PyTorch/doc/PR.md 2.2):
+#
+#   1) OFFLINE (default, what the delivery tree does): the package is vendored at
+#      ``tcap_dllogger/`` (provenance in ``SOURCE.json``) and
+#      train_sdaa.py puts the tree root on sys.path explicitly, then imports
+#      ``tcap_dllogger`` and FAILS CLOSED if it is missing.  Nothing to install.
+#   2) ONLINE (pinned): uncomment the next line to install the same revision from
+#      GitHub instead of using the vendored copy.
+# git+https://github.com/Tecorigin/tcap_dllogger.git@6997d7d15b1b23e9000f9e5c5cd7536b6e1b299e
+#
 # Pins below are the verified Python 3.11 compatible releases.  Install them from
 # a local wheel cache when the official network is unavailable:
 #   "$PYTHON" -m pip install --no-index --find-links /path/to/wheels -r requirements.txt

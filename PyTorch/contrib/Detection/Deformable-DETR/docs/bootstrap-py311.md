@@ -36,12 +36,25 @@ export PYTHON=/home/py312/bin/python    # 本队厂商环境（默认值）
 
 1. **进入官方 ModelZoo 训练镜像**：Python 3.11 + PyTorch 2.7.1 + torchvision 由镜像提供。
    **不要**用 pip 安装/升级/卸载 torch、torchvision；`requirements.txt` 也刻意不包含它们。
-2. **安装配对的原生 `tecoops` whl（必需）**：从 Teco-Ops PR #40 的源码用该解释器构建原生前向 +
+2. **安装配对的原生 `tecoops` whl（必需）**：从**提交的算子仓 main** 的源码用该解释器构建原生前向 +
    一阶反向扩展并打包：
    ```bash
-   # 在 Teco-Ops PR #40 的 checkout 内（head ff17c0e 侧）
+   # 在**提交的算子仓 main `e4e691d2b1915b0744ca0a1119fd6d79d2112cab`** 的 checkout 内
+   # （= 上一版 pin `79941c5`（= `4adfd05e`（`459992a2` + Deformable value-leaf stage-1 `2f3a7735` + 团队 fused NeoX RoPE
+   #  `9fba48c` 的 merge（`d816f17`）+ Hy 真实 shape 用例）+ 7 个纯增量 CI 测试件 `dda33c5b`
+   #  + `ms_deform_attn_forward` per-value-plane 整块搬运；父提交可复核；已含
+   #  ms_deform_attn_forward 的 span-merge 尾置独立 TU
+   #  `teco/ual/kernel/z_ms_deform_attn_forward_span/`、新整块搬运 TU
+   #  `teco/ual/kernel/zz_ms_deform_attn_forward_plane/` 与 Deformable 的
+   #  `teco/ual/kernel/zz_ms_deform_attn_backward_ha/`）
+   #  + `d84f34f`（flash_attention NT-form score GEMM `BM==64`，D256 路径）
+   #  + `54a1d65`（rms_norm 共享 16-wide FP16 epilogue 展开，H2-only）
+   #  + `98e18ca`（rotary_embedding PR #48 CI 修复同步入提交仓：kernel 仅新增 BSD 3-Clause 头、无算术改动，
+   #   `python_api_test/test_rotary_embedding.py` gate 改为 in-place 与 out-of-place DEVICE 输出逐位严格一致））
    WITH_TORCH=ON WITH_INFERENCE_PLUGIN=OFF "$PYTHON" setup.py bdist_wheel
    "$PYTHON" -m pip install dist/tecoops-<version>-cp3xx-cp3xx-linux_loongarch64.whl
+   # 本队实测指纹（cp312 `7ae859dc` 3,401,412 B / cp311 `5c38e5e8` 3,183,712 B）见 ../README.md
+   # 本次 pin 前进至 `e4e691d2b1915b0744ca0a1119fd6d79d2112cab` 仅涉及注释与测试（kernel 只新增 BSD 3-Clause 头、`python_api_test` gate 为测试侧改动），故 whl 指纹表仍是 `54a1d65` 侧的实测记录，本窗口未重建任何 whl。
    ```
    模型侧通过 `models/ops/_tecoops_binding.py` 在**导入期一次绑定** `tecoops`；缺包即 fail-closed，
    不会回退到 torch 实现。`TECOOPS_API_ROOT` **不再必需**，仅作为源码树开发态的可选覆盖
@@ -110,5 +123,18 @@ bash run_scripts/verify_native_voc.sh --output /dev/shm/voc-native-focused.json
 
 - 本轮**未**准备 py3.11 环境、未安装依赖、未构建 py3.11 版 `tecoops`、未上卡、未运行训练/评估。
 - 本文件只固化静态步骤；§3 的门禁需要 GPU 窗口。
-- py3.12 的全部既有证据（`README.md` 验证表、`validation.json`、`validation-producer-go-20261007.json`）**不能**替代
+- py3.12 的全部既有证据（`README.md` 验证表、模型分支 `experiments/deformable-detr.md`、本目录 `validation.json`）**不能**替代
   py3.11 复跑结论，两者需分别记录。
+
+> **2026-10-14 cycle-25 第五次 pin 前进（本段为本轮新增）**：提交的算子仓 main 从 `98e18ca2f124fdcf540b661d932d9a9940f4dba7`
+> 前进到 **`e4e691d2b1915b0744ca0a1119fd6d79d2112cab`**。**与上一次（98e18ca，纯注释/测试）不同，本次包含真实的 kernel 改动**：
+> `flash_attention` 的 NT-form score GEMM 扩到 `BM==128`，并让 scale / causal-mask /
+> online-softmax 直接在转置后的分数 tile 上求值（消掉 `S^T→S` flip），`<128>` 实例化移入
+> 尾部设备 TU `teco/ual/kernel/zzz_flash_attention_d128/zzz_flash_attention_d128.scpp`
+> （链接序由队内守卫脚本正/负例证明）。官方 11 例全表 **13.94571 → 12.36289 ms = +11.350%**，
+> 11/11 例 `max_error` 与基线**逐位相同**（132/132 run `ALL PASSED`）；唯一越带项 = `case_7`
+> （D512）`+8.20%`（+0.0127 ms），已登记为预注册兄弟带的**明确偏离**（见本队账本仓
+> `docs/competition/c25-lead-ledger-20261014.md`）。
+> **⚠ 复现须知**：本前方的 `whl` 指纹表（cp312 `7ae859dc…` / cp311 `5c38e5e8…` 等）
+> 是 `54a1d65`/`98e18ca` 侧的实测记录，**不再对应当前 main**；本窗口**未重建任何 whl**。
+> 复现者必须按本 pin（`e4e691d2b1915b0744ca0a1119fd6d79d2112cab`）的源码重新 `setup.py build_ext --inplace` 并重建 wheel 后再运行。

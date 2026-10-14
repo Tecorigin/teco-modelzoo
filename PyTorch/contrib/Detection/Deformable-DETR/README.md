@@ -1,119 +1,206 @@
-# Deformable-DETR VOC2007 SDAA training
+# Deformable-DETR
 
-本目录提供赛题 5 的 ResNet-50 single-scale 训练、COCO AP 评估和断点续训入口。源码固定为 [Tecorigin/Deformable-DETR @ 1bda1f9](https://github.com/Tecorigin/Deformable-DETR/tree/1bda1f956a326d2601302413e4618c0fd109e799)，保留原网络、损失、增强和 Apache 版权声明；来源及文件哈希见 [SOURCE.json](SOURCE.json)。MSDeformAttn 在导入时绑定到 [Teco-Ops PR #40](https://github.com/Tecorigin/teco-ops/pull/40) 的配对原生前向和一阶反向。模型路径不使用 CPU grid_sample；CPU Hungarian matching 按官方实现保留。
+## 1. 模型概述
 
-本队厂商 py312 环境已完成 20 轮训练及完整 4,952 张 VOC2007 test 集评估，COCO AP@[.50:.95]=0.6013724164870897，超过本次 0.570 门槛。官方 ModelZoo Python 3.11 环境和 maintainer CI 仍未验证，因此不宣称适配完成。对象检测没有 32-token 生成接口；对应 smoke 为真实 VOC 前向、criterion、反向、优化器更新与检测评估。
+本目录提供赛题 5 的 **ResNet-50 single-scale Deformable-DETR** 在太初（Tecorigin）加速卡上的
+训练、评估与断点续训入口，数据集为 VOC2007。
 
-## Environment
+- **模型来源**：`Tecorigin/Deformable-DETR @ 1bda1f956a326d2601302413e4618c0fd109e799`（Apache-2.0），
+  保留原网络、损失、数据增强与版权声明；来源与文件哈希见 [SOURCE.json](SOURCE.json)。
+- **算子**：`MSDeformAttn` 的多尺度可变形注意力由**本队开发的 C++ 算子**提供
+  （`tecoops.ms_deform_attn` 前向 + 配对的一阶反向，见 Teco-Ops 提交仓 main `e4e691d2b1915b0744ca0a1119fd6d79d2112cab`），
+  通过 `models/ops/_tecoops_binding.py` 在**导入期一次绑定**（热路径零分支、零 `getenv`）。
+  缺包 / 缺原生对象 / 缺入口一律 **fail-closed**，**不回退**到 CPU 或 torch 实现。
+- **单卡形态**：本入口为**单进程单卡**（`--gpu 0` 语义由运行环境决定）；太初卡为**单卡四核组**结构，
+  日志中的 `bs` / `train.ips` 按**单核组**口径给出（公式见 §2.4）。
+- **入口**：`run_scripts/test.sh`（训练/评估/续训统一入口，参数见 §2.4）。
 
-使用已有厂商环境，固定 `/home/py312/bin/python`，解析路径为 `/usr/local/python/bin/python3.12`。本轮验证为 Python 3.12.13、PyTorch 2.12.0a0+git0d62256、Torch-SDAA 20260623.8.51.dev0+gitd942f23、driver/runtime 3.2.0，单个 15 GiB 逻辑 SDAA 设备。不升级或改动全局 PyTorch、Torch-SDAA、torchvision 等耦合依赖。非耦合依赖列于 [requirements.txt](requirements.txt)；TCAP logger 固定源码在 `tcap_dllogger/`，无需全局安装。
+目录结构：
 
-交付入口用**解释器能力契约**取代了历史上的 py312 路径硬断言（见 [runtime_contract.py](runtime_contract.py) 与
-[docs/bootstrap-py311.md](docs/bootstrap-py311.md)）：`PYTHON` 可指向官方 Python 3.11 或厂商 3.12（默认仍是
-`/home/py312/bin/python`），入口再校验真实能力——Python 主次版本、`torch`/`torchvision`、`torch_sdaa` 且
-`torch.sdaa.is_available()`、以及**已安装的 `tecoops` whl**（`import tecoops`；缺包即 fail-closed，不存在 torch 回退）。`TECOOPS_API_ROOT` 不再是必需项，仅作为源码树开发态的可选覆盖保留。
-任一项不满足即 fail-closed 并打印可执行提示；**不允许 CPU fallback**。官方 py3.11 会话先用
-`bash run_scripts/precheck_official_env.sh` 做静态预检（只导入与哈希，不装包、不占卡）。
+```
+run_scripts/        入口与契约（test.sh 为唯一启动入口）
+models/ datasets/ engine.py main.py util/   官方训练栈（本地适配层见 train_sdaa.py）
+tcap_dllogger/      只读第三方日志库（原 vendor/tcap_dllogger，按 ModelZoo 布局上提，见 RELOCATION-NOTE.md）
+docs/               官方 py3.11 环境引导
+```
 
-官方 [ModelZoo 适配指南](https://github.com/Tecorigin/teco-modelzoo/blob/45e6b89185c8e6e081ce58d759cd62b8d15a1f5c/PyTorch/doc/模型适配指南.md)指定 Python 3.11 / PyTorch 2.7.1，与本队 AGENTS.md 的 py312 硬约束不同。本提交只证明上述 py312 栈；官方 py311 栈尚未执行；maintainer CI 也未验证。Full20 结果仅说明本队 py312 环境的全测试门槛通过，不表示官方环境门禁或适配完成。
+## 2. 快速开始
 
-原生 MSDA 通过**已安装的 `tecoops` whl** 绑定：`pip install tecoops-<version>-cp3xx-cp3xx-linux_loongarch64.whl` 后 `import tecoops`，模型调用 `tecoops.ms_deform_attn`（前向）与配对的一阶反向；绑定点是 `models/ops/_tecoops_binding.py`，在**导入期一次绑定**（热路径零分支、零 `getenv`），缺包 / 缺原生对象 / 缺入口一律 fail-closed，**不依赖源码树路径**，也不要求 `TECOOPS_API_ROOT`（该变量仅作为源码树开发态的可选覆盖：设置时 `tecoops` 必须解析在其之下）。
+### 2.1 基础环境安装
 
-本轮实测 whl 由 PR #40 head `ff17c0ed940d810ccda0cdff965a7b54d0b06877` 的源码在隔离副本构建（`WITH_TORCH=ON WITH_INFERENCE_PLUGIN=OFF /home/py312/bin/python setup.py bdist_wheel`，cp312 / linux_loongarch64）：文件名 `tecoops-0.0.0-cp312-cp312-linux_loongarch64.whl`，**SHA-256 `e16d2f4b8555c640b9fcae09f7c4c5050648a1aeaf72f541edf29f049194f068`**（3,276,490 字节）；包内 `tecoops/_torch_ext.cpython-312-loongarch64-linux-gnu.so` = `e0424d1e…`、`tecoops/libteco_ops.so` = `6bd4ed1a…`。这四个算子源码（`.scpp`/`.h`/`find_*.cpp`/`.hpp`）与本交付树 api 构建的源码 SHA-256 **4/4 相同**；whl 内的 `.so` 与交付树 api 构建（`5e244917…`/`d3ae7b74…`）**字节不同**——同源码在不同 build root 下会差字节，本仓库对此的口径是**只做同 build 比较**。whl **不随 git 提交**；构建命令、源码 SHA 与获取方式见 [docs/bootstrap-py311.md](docs/bootstrap-py311.md)。
+需要官方 ModelZoo 镜像（Python 3.11 + PyTorch 2.7.1 + torchvision）或本队厂商栈
+（`/home/py312/bin/python`，Python 3.12 + Torch-SDAA）。**不要**用 pip 安装/升级/卸载
+`torch` / `torchvision` / `torch_sdaa`：它们由镜像提供。
 
-## Read-only assets
+解释器可用环境变量选择，并被入口的能力契约校验（版本、SDAA 可用设备数 ≥1、`tecoops` 可导入）：
 
-`MODEL_ROOT` 引用已预置的官方 `data_ckpt` 目录，内含 `voc_coco/` 和 `r50_deformable_detr_single_scale-checkpoint.pth`。不下载第二份数据或权重。启动脚本只创建符号链接：数据位置为模型根目录 `./data/voc_coco`，预训练权重链接位于模型根目录，满足官方布局。
+```bash
+export PYTHON=/home/py312/bin/python     # 本队厂商栈（默认值）
+export PYTHON=/path/to/python3.11        # 官方 ModelZoo 环境
+```
 
-| Asset | Count / bytes | SHA-256 |
+只读资产根目录（**必须设置**，入口会 fail-closed）：
+
+```bash
+export MODEL_ROOT=/root/competition-assets/deformable-detr-voc2007-20260717/payload/data_ckpt
+```
+
+### 2.2 准备数据集
+
+`MODEL_ROOT` 指向**已预置的只读** `data_ckpt` 目录，入口只创建符号链接（不复制、不下载）：
+
+| 资产 | 规模 | SHA-256 |
 | --- | --- | --- |
-| VOC2007 trainval JSON | 5,011 images / 15,662 annotations | e511d3a0e39f45162887e4d9f0bed63bf8f01e4c421d965445185b72990f1ab5 |
-| VOC2007 test JSON (val directory) | 4,952 images / 14,976 annotations | 14edfb83a2525773c9e5b6e6d4bfa57a866de1cb3ca164c46afe0ac97629b561 |
-| Official pretrained checkpoint | 407,659,336 bytes | d442fb2365d6e9640347b2b38686089d13cd55a5c3790d63e3602d079791fed1 |
+| VOC2007 trainval JSON | 5,011 图 / 15,662 标注 | `e511d3a0e39f45162887e4d9f0bed63bf8f01e4c421d965445185b72990f1ab5` |
+| VOC2007 test JSON（val 目录） | 4,952 图 / 14,976 标注 | `14edfb83a2525773c9e5b6e6d4bfa57a866de1cb3ca164c46afe0ac97629b561` |
+| 官方预训练权重 | 407,659,336 B | `d442fb2365d6e9640347b2b38686089d13cd55a5c3790d63e3602d079791fed1` |
 
-类别 ID 为 1–20，分类头输出 21 通道。资产只读；训练产生的新检查点写入显式指定的输出目录，至少需要 2 GiB 空闲空间。每次调用使用一个新的空输出目录，避免覆盖失败现场。
+数据布局为 `$MODEL_ROOT/voc_coco/{train,val}/{images,*.json}` 与
+`$MODEL_ROOT/r50_deformable_detr_single_scale-checkpoint.pth`；入口把两者分别链接到
+`./data/voc_coco` 与模型根目录。类别 ID 为 1–20，分类头输出 21 通道。每次调用必须使用**新的空输出目录**。
 
-## Training and resume
-
-从干净检出按下面命令启动。环境变量替换为本机已有资产和原生包位置；没有权重复制、全局安装或修改框架步骤。
-
-```bash
-export MODEL_ROOT=/path/to/provisioned/data_ckpt
-# paired native MSDA: install the wheel for the running interpreter (required)
-pip install /path/to/tecoops-<version>-cp3xx-cp3xx-linux_loongarch64.whl
-export SDAA_VISIBLE_DEVICES=0
-cd run_scripts
-bash test.sh --output-dir /dev/shm/voc20-run --epoch 20 --batchsize 2 --seed 42
-```
-
-默认总目标为 20 轮、FP32、R50、1 level、300 queries、6+6 layers、H8/D32/P4；AdamW lr=2e-5、backbone lr=2e-6、projection multiplier=.1、weight decay=1e-4、gradient clip=.1、StepLR drop=14。单进程同步 SDAA 搬运；`num_workers=0` 使增强 RNG 可恢复。每轮使用独立 `seed+epoch` 采样 generator，保存批次游标；batch=2 时每轮 2,505 批，沿用官方 `drop_last=True`。
-
-预训练加载只重新初始化 COCO 91→VOC 21 类分类头。`--resume` 专用于本入口产生的训练检查点，严格恢复已训练分类头、三组 AdamW 状态、scheduler、Python/NumPy/Torch/SDAA RNG、epoch 和 batch cursor；恢复起点逐项精确检查。检查点以 `weights_only=True` 读取，初始官方 legacy 文件仅额外允许 `argparse.Namespace`。
+### 2.3 构建环境
 
 ```bash
-# 继续同一总计 20 轮目标，不重新初始化分类头；使用新的输出目录。
-bash test.sh --output-dir /dev/shm/voc20-resume \
-  --resume /dev/shm/voc20-run/checkpoint.pth
+# 1) 非耦合依赖（离线时用本地 wheel 缓存）
+"$PYTHON" -m pip install --no-index --find-links /path/to/wheels -r requirements.txt
 
-# 完整测试集评估必须使用已训练检查点。
-bash test.sh --output-dir /dev/shm/voc-eval \
-  --resume /dev/shm/voc20-resume/checkpoint.pth --eval
-
-# 有界集成检查；不代表完整训练或官方 AP。
-bash test.sh --output-dir /dev/shm/voc-check \
-  --max-seconds 330 --eval-images 32 --checkpoint-every 100
+# 2) TCAP 日志（主办方要求，前端 stdout）：本树已随 tcap_dllogger/ 提供，离线可用；
+#    requirements.txt 里另有可选 pin（联网时启用），二者等价。
+# 3) 原生 tecoops whl（必需）：由 Teco-Ops 源码为本解释器构建并安装
+"$PYTHON" -m pip install tecoops-0.0.0-cp3xx-cp3xx-linux_loongarch64.whl
 ```
 
-默认每 1,000 步及轮末/有界正常退出时原子覆盖一个 `checkpoint.pth`，不累计多份权重。输出包括 `startup.json`、逐步 `steps.jsonl`、TCAP `sdaa.log`（train.loss/train.ips/val.loss/val.ips，rank=0）、`evaluation.json` 和 `result.json`。运行脚本默认启用原生调用计数，每个训练批次必须有 12 次 native forward 与 12 次 native backward。
+`tecoops` whl 由**提交的算子仓 main `e4e691d2b1915b0744ca0a1119fd6d79d2112cab`**（= 上一版 pin
+`79941c5`（= `4adfd05e`（含 `459992a2` + Deformable value-leaf stage-1 `2f3a7735` + 团队融合 NeoX RoPE
+`9fba48c` 的 merge 与 Hy 真实 shape 用例）+ 7 个纯增量 CI 测试件 `dda33c5b` +
+`ms_deform_attn_forward` per-value-plane 整块搬运 `79941c5`）
++ `d84f34f`（flash_attention：NT-form score GEMM 扩到 `BM==64`，D256 路径）
++ `54a1d65`（rms_norm：共享 16-wide FP16 epilogue 展开，H2-only；该轮刷新只改
+`teco/ual/kernel/flash_attention/flash_attention.scpp` 与 `teco/ual/kernel/rms_norm/rms_norm_fp16.scpp`
+两个文件，`ms_deform_attn` 侧源码逐字节未动）
++ `98e18ca`（rotary_embedding：PR #48 CI 修复同步入提交仓；本轮只改
+`teco/ual/kernel/rotary_embedding/rotary_embedding_fp16.scpp`（仅新增 30 行 BSD 3-Clause 头，无算术改动）
+与 `python_api_test/test_rotary_embedding.py`（gate 改为 in-place 与 out-of-place DEVICE 输出逐位严格一致）
+两个文件；两个 Hy 用例已在提交仓内且与 PR head 逐字节相同，未改））
+的源码构建，命令 `WITH_TORCH=ON WITH_INFERENCE_PLUGIN=OFF "$PYTHON" setup.py bdist_wheel`：
 
-## Verification, 2026-10-06 and 2026-10-07
+| 解释器 | 字节数 | whl SHA-256 | 包内 `_torch_ext*` | 包内 `libteco_ops.so` |
+| --- | ---: | --- | --- | --- |
+| cp312 | 3,401,412 | `7ae859dcda1b03ccdeb64b05858ced1c9656bb26d97802016910a6f6334dc425` | `5c267322c1ee1a83a65fed748eb58fdc0b57f186336624b26b484daacfb11675` | `e7722cbcdb2b0eb83859bc210a7892f1ac41ff836c4d9ce5401843b15e5b9304` |
+| cp311 | 3,183,712 | `5c38e5e816bde3841d0269dc22d90bc38bd8231df62ac4eed24565603ef9dc5f` | `12c03c922ddf28b3bb2e7d051a30787469e061b6038b9d7a1405d2d5596d2a6f` | `d8b30e7ba21ae1624a7819c6bed6f2d1b3f35577712ce8aed83be4bef30dd493` |
 
-| Gate | Result |
-| --- | --- |
-| Actual VOC IDs 1/2, L1 model-boundary CPU oracle | 12 native model calls, 286 finite parameter gradients; forward max error 2.503395e-6, gradient max error 3.099442e-6; original atol/rtol preserved |
-| Checkpoint restore and continued updates | 549 model tensors, 858 optimizer tensors, 3 RNG tensors restored exactly; scheduler/scalars/cursor matched; trained classifier retained, optimizer step 2→4 |
-| Real changing-batch steady training | 341 optimizer updates / 330.203398 s; each batch native forward/backward 12/12; peak allocated 2771.174 MiB, reserved 4304 MiB |
-| Evaluation plumbing | 32 real test images remain diagnostic; the full 4,952-image result is recorded separately below |
-| Syntax, clean source wrapper, repository hooks | 43 source files verified, Python syntax and git diff --check pass; four unmodified official hooks pass; public wrapper resumed step 345→346 and evaluated 32 images |
-| Full 20 epochs / full-test AP >= 0.570 | Passed on py312: 20/20 epochs; global step 50,100 (49,754 this invocation); full_test=true on 4,952 images; COCO AP@[.50:.95] 0.6013724164870897. All 49,754 logged loss and grad_norm values finite; 1,191,288 forward / 597,048 backward calls; peak allocated/reserved 2771.765625/5862 MiB. No performance improvement claimed. |
+> 本次 pin 前进至 `e4e691d2b1915b0744ca0a1119fd6d79d2112cab` 仅涉及注释与测试（kernel 只新增 BSD 3-Clause 头、`python_api_test` gate 为测试侧改动），故 whl 指纹表仍是 `54a1d65` 侧的实测记录，本窗口未重建任何 whl。
+>
+> pin 以**源码 commit + whl 指纹**为准，**不以 core lib 字节为准**：`libteco_ops.so` 的字节随
+> build root 变化，跨 build 的差值不作结论。whl 不随 git 提交。历史沿革：更早的实测曾用
+> PR #40 head `ff17c0e` 与 `459992a2` 侧的 whl；上一版 pin `79941c5` 的实测为 cp312
+> 3,400,195 B / `d558d192`、cp311 3,182,518 B / `214a12a5`，均已由上表取代。
+>
+> 本轮 whl 的构建根为 `/root/tmpwork/c23-refresh/wt-plane`（cp312，Python 3.12.13）与
+> `/root/tmpwork/c23-refresh/wt-plane311`（cp311，Python 3.11.6）；同源码在不同 build root 下
+> **whl 容器与 `libteco_ops.so` 的字节都会变化**（ZIP 时间戳 + 内嵌绝对源码路径），
+> 故上表是"该次构建"的实测记录，不是可复现不变量。
+> 模型侧最小入口验收（上表 cp312 轮、单训练步 + 2 张评估图）已用本轮 whl
+> （隔离安装目录 `/root/tmpwork/c23-refresh/inst312`，包内 `_torch_ext*`/`libteco_ops.so`
+> 与 whl 内成员同哈希）在设备锁下重跑：`entry_rc=0`、`last_loss=16.848045349121094`、
+> `native_calls {forward: 24, backward: 12}`、`fallback=0`、峰值 allocated 1062.31 MiB，
+> 其中 `last_loss` / `native_calls` / 峰值显存三项与 `4adfd05e` 侧**逐值相同**；
+> 同次 `val.loss=15.380858421325684` 与更早一轮 `15.379915237426758` 差 9.4e-4（0.006%），
+> 同命令同资产下未定位到来源，不据此下结论。
+> 证据：`/root/tmpwork/c23-refresh/tcap-accept/{stdout.txt,result.json,tcap-acceptance.txt}`
+> （`stdout.txt` 14,712 B / `ea7e2c064747e6be134f4b6642bfd04c5522312ceaf915ca3a40e102362aa47d`，
+> `result.json` 2,905 B / `a422692ac26178fc3e775258ce17890edea86f22eb90028316bc3b53b245b6f5`）。
 
-
-Full20 的原始 result.json 明确记录 full_test=true 和 4,952 张图；其中 coco_eval_bbox[0] 为 0.6013724164870897，满足本次完整测试集 0.570 门槛。保留原始 result.json limits 中通用的 subset AP 提示不变；该提示描述子集诊断，full20 记录里的 full_test 标记和图像数说明这次评估覆盖完整测试集。训练循环 steps.jsonl 共 49,754 条记录，逐条 loss 与 grad_norm 均为有限值。
-
-full20 的 startup.json 记录 trainval/test 图像数 5,011/4,952，训练集 JSON、测试集 JSON 和官方预训练权重 SHA-256 分别为 e511d3a0e39f45162887e4d9f0bed63bf8f01e4c421d965445185b72990f1ab5、14edfb83a2525773c9e5b6e6d4bfa57a866de1cb3ca164c46afe0ac97629b561 和 d442fb2365d6e9640347b2b38686089d13cd55a5c3790d63e3602d079791fed1，与上方只读资产表一致。完成记录、原始 result/startup JSON 与 steps.jsonl 的路径和 SHA-256 见 validation.json。
-
-训练使用代码 commit e8d314544ad96a27734172da0dc7382bcb87c6d7；完成时模型分支 HEAD 为 9318608eadc40e5ece26e5ac33a6c26f48b0131e。train_sdaa.py 和 SOURCE.json 的 SHA-256 与启动记录一致；训练入口、run_scripts 和 vendor 源码在该代码 commit 与分支 HEAD 之间无差异。此次仅更新文档，不改变训练入口或运行时代码。
-原生一阶反向的列表归约顺序不保证位级确定性。连续训练与续训轨迹的首轮参数比较超过 atol=2e-5/rtol=1e-4，失败记录保留，未放宽该门限；两次完全连续训练的最大参数漂移为 7.626414e-5，连续与续训为 7.621944e-5。检查点恢复起点本身完全相同；不宣称后续训练轨迹位级相同。全量 AP 结果见上表；官方 py311 与 maintainer CI 尚未验证，因此不据此宣称最终竞赛适配完成。
-
-CPU-info 架构提示和官方 torchvision/meshgrid/SyntaxWarning 保留在原始 stderr。本入口仅验证单设备 FP32 eager first-order，未验证 AMP、DDP、二阶梯度或 torch.compile。历史 L4 随机权重性能结果不作为本 VOC L1 配置的证据。
-
-参考正确性入口（与交付入口同一解释器、SDAA 运行库与**同一份已安装 whl**；`SDAA_VISIBLE_DEVICES` 固定单设备）：
+### 2.4 启动训练
 
 ```bash
-bash run_scripts/verify_native_voc.sh --output /dev/shm/voc-native-focused.json
+export MODEL_ROOT=/root/competition-assets/deformable-detr-voc2007-20260717/payload/data_ckpt
+export PYTHON=/home/py312/bin/python
+
+# 最小集成检查（1 个训练步 + 2 张评估图；输出目录必须为空且是新的）
+bash run_scripts/test.sh --max-train-steps 1 --eval-images 2 --output-dir /tmp/detr-smoke
+
+# 有界训练（示例：续跑到某个步数上限）
+bash run_scripts/test.sh --max-train-steps 100 --output-dir /tmp/detr-run
+
+# 完整测试集评估（需要已训练的 checkpoint）
+bash run_scripts/test.sh --eval --output-dir /tmp/detr-eval
 ```
 
-该包装脚本与 `run_scripts/test.sh` 共用 `run_scripts/_entry_env.sh`：`PYTHON` 默认厂商路径、`MODEL_ROOT` fail-closed、
-在运行前跑同一能力契约；`TECOOPS_API_ROOT` **不再必需**（仅源码树开发态可选覆盖，设置时校验 `tecoops` 解析在其之下）。
-`verify_native_voc.py` 会打印实际加载的 `tecoops.__file__` 与其原生对象 SHA-256 自证，避免审计发现的「文档入口静默验证到无关旧 wheel」。
+常用参数：`--output-dir`（**必填**）、`--max-train-steps`、`--eval-images`、`--max-seconds`、
+`--resume`、`--checkpoint-every`、`--eval`。
 
-交付训练入口是 `run_scripts/test.sh`（内部 `run_DeformableDETR.py` → `train_sdaa.py`）。同目录的 `run_deformable_detr.py` 是上游遗留脚本（调用原始 `main.py`），**不是**本交付的 SDAA 入口，保留仅为来源完整性。
+**期望的 TCAP 前端日志**（每次迭代一行；`StdOutBackend` 输出到 stdout）：
 
-## Producer grad_output 单机制验证，2026-10-07
+```
+TCAPDLL 2026-10-12 14:22:47.916119 - Epoch: 0 Iteration: 1  rank : 0  bs : 0.5  train.loss : 16.848045349121094  train.ips : 0.5378888242411314 imgs/s
+TCAPDLL 2026-10-12 14:22:47.916428 - Epoch: 0 Iteration: 1  rank : 0  scope : aggregate  bs : 2  train.loss : 16.848045349121094  train.ips : 2.1515552969645255 imgs/s
+TCAPDLL 2026-10-12 14:22:49.490222 - evaluation rank : 0  val.loss : 15.379915237426758  val.ips : 2.755475085076346 imgs/s
+```
 
-本轮仅修改原生 List backward 的 producer grad_output 搬运：每 owner 采用64B对齐的 `T go_record[128]` 与精确 `D*sizeof(T)` blocking memcpy，再使用原 `load_scalar`。CAS/node/list ownership、corner value/consumer go DMA、几何、数学顺序、FP16 bit conversion、ABI和分核不变。模型训练入口及初始化绑定方式不变。
+**单核组换算（太初卡为单卡四核组）**：每条训练日志先给**单核组**口径，随后在**同一步**再给一行聚合口径作对照：
 
-对应算子源固定为 [Teco-Ops PR #40](https://github.com/Tecorigin/teco-ops/pull/40) commit `de4b69dfc1b3b984957e26d8aa7033c03fd7db4b`；目标 kernel SHA-256 为 `17e2b03a8e4168861ee0d4bea4b62b9d39f84d38421e158b9152babd7b9ed23e`。独立构建测试的 candidate core SHA-256 为 `618195bf59c3bc5946d7865a4eddd6131eec93b788884b8b5a9d99e7656f9a56`，extension仍为上方 `4c44e07c…`。最终PR源码的18个runtime文件已按canonical Git字节与候选验证源对应；没有声称从该最终PR head重新构建wheel或官方CI结果。
+```
+bs_per_core_group  = bs_aggregate  / SDAA_CORE_GROUPS      # SDAA_CORE_GROUPS = 4
+ips_per_core_group = ips_aggregate / SDAA_CORE_GROUPS      # 单位 imgs/s
+train.loss                                 # 逐图均值，两种口径同值
+```
 
-原 backward132、offset216 exact、List48及forward全部通过。首次forward因旧bootstrap优先选installed package报AttributeError；原失败保留，显式startup选择私有api后同测试与原阈值通过。真实VOC L1（N2/S494/H8/D32/P4，encoderQ494/decoderQ300）FP16 micro三次候选均快于三次baseline，encoder/decoder median延迟减少6.09%/2.97%；FP32 micro区间重叠。
+即第一行 `bs : 0.5 = 2/4`、`train.ips : 0.5379… = 2.1516…/4`；第二行 `scope : aggregate` 是整卡聚合值。
+日志由 `tcap_dllogger/`（离线可用）输出；`StdOutBackend` 不在后端列表时入口 **fail-closed** 报错。
 
-实际VOC两图FP32无capture/hooks计时：baseline `0.606179200/0.624600624/0.621106923 s`（median `0.621106923`），candidate `0.610509759/0.611365727/0.621194002 s`（median `0.611365727`）。1.568% median差小于baseline spread2.966%，三区间重叠，因此不声称稳定模型提速。两方peak allocated/reserved均为 `888.853516/958 MiB`。独立baseline/candidate correctness与候选 `380轮/300.711627 s` steady每轮原CPU oracle门限通过，12forward+12backward、286有限参数梯度；无optimizer update或checkpoint写入。上方Full20/AP只属于既有baseline，不作为本候选精度或性能证据。
+### 2.5 训练结果
 
-完整原值/中位数、shape、来源映射、core/kernel/ext/image/checkpoint SHA、原阈值与限制见 [单机制公开证明](validation-producer-go-20261007.json)。本模型独立接入与验证对应 [ModelZoo PR #6](https://github.com/Tecorigin/teco-modelzoo/pull/6)。原始日志与过程任务保留在模型分支 `logs/deformable-detr/producer-go-record-20261007/` 和 `op_learning/attention/deformable-producer-go-record-20261007/`；历史L4 profile及其他模型结果不计入本轮证据。
+最小集成检查的实测结果（官方计分资产、单卡、`--max-train-steps 1 --eval-images 2`）：
+
+| 指标 | 实测 | 原件（数值出处） |
+| --- | --- | --- |
+| `entry_rc` | **0** | `run_scripts/test.sh` stdout 原件 `/root/tmpwork/c20-detr/tcap-accept/stdout.txt`（15,210 B，sha256 `f35272b1…d77739`）；摘要 `/root/tmpwork/c20-detr/tcap-accept/tcap-acceptance.txt` 的 `"entry_rc": 0` / `"verdict": "PASS"` |
+| `last_loss` | **16.848045349121094**（逐字等于历史两次独立复跑） | 机器可读 `/root/tmpwork/c20-detr/tcap-accept/result.json` 的 `last_loss`（2,896 B，sha256 `262f2a11…ca6498`）；同值亦见 stdout 的 TCAP 行与 `tcap-acceptance.txt` 的 `field_values_first_cg_row.train.loss` |
+| `native_calls` | **`{forward: 24, backward: 12}`** | `/root/tmpwork/c20-detr/tcap-accept/result.json` 的 `native_calls.forward` / `native_calls.backward`（同值亦见 stdout） |
+| 峰值显存 | `peak_allocated 1062.314453125 MiB` / `peak_reserved 1692.0 MiB` | `/root/tmpwork/c20-detr/tcap-accept/result.json` 的 `peak_allocated_mib` / `peak_reserved_mib`（同值亦见 stdout） |
+| `fallback` | **0** 次（不回退到 CPU/torch 实现） | `/root/tmpwork/c20-detr/tcap-accept/tcap-acceptance.txt` 的 `"fallback_mentions": 0` / `"module_not_found": 0`；stdout 原件逐字搜索 |
+| TCAP 前端行 | 3 条（训练单核组 + 训练聚合 + 评估）；三字段 `train.loss` / `train.ips` / `bs` 齐全 | stdout 原件 `/root/tmpwork/c20-detr/tcap-accept/stdout.txt`（3 行 TCAPDLL）+ `tcap-acceptance.txt` 的 `first_three_tcap_lines` |
+
+**取数口径与原件清单（避免"数字不点名日志"）**：上表每个数字都可在下列文件中逐字复核；路径为生成该轮验收时的**窗口落盘位置**（非本仓库），窗口脚本 `/root/tmpwork/c20-detr/accept_tcap.sh`、窗口日志 `/root/tmpwork/c20-detr/tcap-accept/window.log`（1,434 B，sha256 `0b7b8227…6c93dc`，含逐次取锁与收工 `NO-VLLM-AFTER`）。
+
+| 原件 | 内容 | 大小 / sha256（前 8…后 6） |
+| --- | --- | --- |
+| `/root/tmpwork/c20-detr/tcap-accept/stdout.txt` | `run_scripts/test.sh` 的 **stdout 原件**（TCAPDLL 行 + 结果 JSON 片段） | 15,210 B / `f35272b1…d77739` |
+| `/root/tmpwork/c20-detr/tcap-accept/result.json` | 结构化落盘：`last_loss`、`native_calls`、`peak_allocated_mib`、`peak_reserved_mib` | 2,896 B / `262f2a11…ca6498` |
+| `/root/tmpwork/c20-detr/tcap-accept/tcap-acceptance.txt` | 验收摘要（`verdict: PASS`、TCAP 行数/三字段/单核组换算断言） | 1,094 B / `4697a640…d6ff431` |
+| `/root/tmpwork/c20-detr/tcap-accept/window.log` | 取锁 / 起止 / 残留检查 | 1,434 B / `0b7b8227…6c93dc` |
+
+> 口径不变：上表是**最小集成检查**（`--max-train-steps 1 --eval-images 2`）的**实测原值**，**不是精度分数、不代表完整训练或官方 AP**。
+
+> 首步 `train.ips` 由 warm-up 主导（单步 wall ≈3.6 s），不代表稳态吞吐；完整 20 轮的精度/吞吐记录见
+> 模型分支 `experiments/deformable-detr.md` 与 `logs/deformable-detr/`（本目录只保留入口与最小可复现证据）。
+> 历史沿革：早期 PR #40/~cycle-07 的过程台账已归档到模型分支日志，不再在本目录重复。
+
+## 许可证与第三方归属
+
+- 本队对 Deformable-DETR 适配目录（`PyTorch/contrib/Detection/Deformable-DETR/`）的**改动以 Apache-2.0 提交**：本目录自带上游 `LICENSE`（**Apache License 2.0**，`Copyright (c) 2020 SenseTime. All Rights Reserved.`，blob `522e5bd3b6cb82fa3c601acd0a0044396c5ea18f`）；而**仓库根 `LICENSE` 是上游继承的 BSD-3-Clause**（`BSD 3- Clause License Copyright (c) 2023, Tecorigin Co., Ltd.`，blob `517f41156d99d7c9e3f95c083da174a4b92f0546`）。两者属**不同层级**的文件，本队**均不改动**。
+- 第三方归属与重定位说明随目录提供：`SOURCE.json`（上游 `Tecorigin/Deformable-DETR` @ `1bda1f956a326d2601302413e4618c0fd109e799`；`tcap_dllogger` @ `6997d7d15b1b23e9000f9e5c5cd7536b6e1b299e`，blob `61da1f2fbd00ec2e5a54ad82ecf2fb7f50b4d46b`）与 `RELOCATION-NOTE.md`（`vendor/` 扁平化重定位说明，blob `91789aa1089a77d6d2ebbfa5c6f09d5a8a75dbee`）。**三者保持原样**。
+- 口径登记：队内材料引用赛事通用要求"以 Apache 2.0 或 MIT 开源"——本目录自带 Apache-2.0，与之相容；与仓库根 `LICENSE`（上游继承 BSD-3）属不同层级。此处按事实并列，**不改任何许可文件、不改归属文件**。
 
 ## 免责声明
-ModelZoo仅提供公共数据集的下载链接。这些公共数据集不属于ModelZoo, ModelZoo也不对其质量或维护负责。请确保您具有这些数据集的使用许可。基于这些数据集的模型仅可用于非商业研究和教育。
 
-致数据集所有者：
+ModelZoo 仅提供公共数据集的下载链接。这些公共数据集不属于 ModelZoo，ModelZoo 也不对其质量或维护负责。
+请确保您具有这些数据集的使用许可。基于这些数据集的模型仅可用于非商业研究和教育。
 
-如果您不希望您的数据集公布在ModelZoo上或希望更新ModelZoo中属于您的数据集，请在Github/Gitee中提交issue,我们将根据您的issue删除或更新您的数据集。衷心感谢您对我们社区的理解和贡献。
+致数据集所有者：如果您不希望您的数据集公布在 ModelZoo 上或希望更新 ModelZoo 中属于您的数据集，
+请在 Github/Gitee 中提交 issue，我们将根据您的 issue 删除或更新您的数据集。衷心感谢您对我们社区的理解和贡献。
+
+> **2026-10-14 cycle-25 第五次 pin 前进（本段为本轮新增）**：提交的算子仓 main 从 `98e18ca2f124fdcf540b661d932d9a9940f4dba7`
+> 前进到 **`e4e691d2b1915b0744ca0a1119fd6d79d2112cab`**。**与上一次（98e18ca，纯注释/测试）不同，本次包含真实的 kernel 改动**：
+> `flash_attention` 的 NT-form score GEMM 扩到 `BM==128`，并让 scale / causal-mask /
+> online-softmax 直接在转置后的分数 tile 上求值（消掉 `S^T→S` flip），`<128>` 实例化移入
+> 尾部设备 TU `teco/ual/kernel/zzz_flash_attention_d128/zzz_flash_attention_d128.scpp`
+> （链接序由队内守卫脚本正/负例证明）。官方 11 例全表 **13.94571 → 12.36289 ms = +11.350%**，
+> 11/11 例 `max_error` 与基线**逐位相同**（132/132 run `ALL PASSED`）；唯一越带项 = `case_7`
+> （D512）`+8.20%`（+0.0127 ms），已登记为预注册兄弟带的**明确偏离**（见本队账本仓
+> `docs/competition/c25-lead-ledger-20261014.md`）。
+> **⚠ 复现须知**：本前方的 `whl` 指纹表（cp312 `7ae859dc…` / cp311 `5c38e5e8…` 等）
+> 是 `54a1d65`/`98e18ca` 侧的实测记录，**不再对应当前 main**；本窗口**未重建任何 whl**。
+> 复现者必须按本 pin（`e4e691d2b1915b0744ca0a1119fd6d79d2112cab`）的源码重新 `setup.py build_ext --inplace` 并重建 wheel 后再运行。
