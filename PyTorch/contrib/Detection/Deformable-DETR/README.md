@@ -8,7 +8,7 @@
 - **模型来源**：`Tecorigin/Deformable-DETR @ 1bda1f956a326d2601302413e4618c0fd109e799`（Apache-2.0），
   保留原网络、损失、数据增强与版权声明；来源与文件哈希见 [SOURCE.json](SOURCE.json)。
 - **算子**：`MSDeformAttn` 的多尺度可变形注意力由**本队开发的 C++ 算子**提供
-  （`tecoops.ms_deform_attn` 前向 + 配对的一阶反向，见 Teco-Ops 提交仓 main `beebae220f0e918460d2210e4064030e157d602d`），
+  （`tecoops.ms_deform_attn` 前向 + 配对的一阶反向，见 Teco-Ops 提交仓 main `0371909a87d5dd11bb928b487afbf6e1e25eb44c`），
   通过 `models/ops/_tecoops_binding.py` 在**导入期一次绑定**（热路径零分支、零 `getenv`）。
   缺包 / 缺原生对象 / 缺入口一律 **fail-closed**，**不回退**到 CPU 或 torch 实现。
 - **单卡形态**：本入口为**单进程单卡**（`--gpu 0` 语义由运行环境决定）；太初卡为**单卡四核组**结构，
@@ -71,7 +71,7 @@ export MODEL_ROOT=/root/competition-assets/deformable-detr-voc2007-20260717/payl
 "$PYTHON" -m pip install tecoops-0.0.0-cp3xx-cp3xx-linux_loongarch64.whl
 ```
 
-`tecoops` whl 由**提交的算子仓 main `beebae220f0e918460d2210e4064030e157d602d`**（= 上一版 pin
+`tecoops` whl 由**提交的算子仓 main `0371909a87d5dd11bb928b487afbf6e1e25eb44c`**（= 上一版 pin
 `79941c5`（= `4adfd05e`（含 `459992a2` + Deformable value-leaf stage-1 `2f3a7735` + 团队融合 NeoX RoPE
 `9fba48c` 的 merge 与 Hy 真实 shape 用例）+ 7 个纯增量 CI 测试件 `dda33c5b` +
 `ms_deform_attn_forward` per-value-plane 整块搬运 `79941c5`）
@@ -111,6 +111,21 @@ export MODEL_ROOT=/root/competition-assets/deformable-detr-voc2007-20260717/payl
 > 证据：`/root/tmpwork/c23-refresh/tcap-accept/{stdout.txt,result.json,tcap-acceptance.txt}`
 > （`stdout.txt` 14,712 B / `ea7e2c064747e6be134f4b6642bfd04c5522312ceaf915ca3a40e102362aa47d`，
 > `result.json` 2,905 B / `a422692ac26178fc3e775258ce17890edea86f22eb90028316bc3b53b245b6f5`）。
+
+> **cycle-33 pin 前进（2026-10-16，内部/交付口径统一）**：本 README 的当前 pin 由 `beebae2` 前进到
+> `0371909a87d5dd11bb928b487afbf6e1e25eb44c`。**对本线是零功能变化的纯一致性前进** —— 已核 `beebae2..0371909`
+> 全量 diff 只有 6 个文件（`api/torch_ext.cpp`、`python_api_test/test_ms_deform_attn_backward.py`、
+> `teco/ual/kernel/causal_conv1d/causal_conv1d.scpp`、`teco/ual/kernel/weight_stream_gemv/weight_stream_gemv.scpp`、
+> `teco/ual/kernel/zzz_flash_attention_d128/zzz_flash_attention_d128.scpp`、
+> `teco/ual/ops/flash_attention/find_flash_attention.cpp`），
+> `ms_deform_attn` 的**全部源码与官方用例逐字节未变**（含 `zz_ms_deform_attn_forward_plane` 整平面 TU 在 `beebae2` 中已存在）。
+> 这四类改动分别属 causal_conv1d / weight_stream_gemv / flash_attention，本线均不调用。
+> ⇒ **本线的 whl 指纹表仍是 `54a1d65` 侧构建的实测记录，本窗口未重建 whl**；复现者按本 pin 重新构建即可，结果对本线等价。
+> 另记（内部镜像修复）：内部工作树 `models/deformable-detr/README.md` 此前仍写 `4adfd05e`（2026-10-12，**早于** `79941c5`
+> 的整平面 TU），已在本轮前移。其旧 whl（`b356240e…`，包内 `libteco_ops.so` `35a76e79…`）的设备符号里只有 `..._span_*`、
+> 没有 `..._plane_*`；同窗口同 build root、只换 `.so` 的 A/B 实测官方 `ms_deform_attn_forward case_0` 为
+> `0.004051 → 0.003348 ms`（**−17.360%**，两臂 `max_error` 逐位相同 `2.57307e-08`）—— 该数字用于说明
+> 「pin 落后一代会丢什么」，**不代表本交付仓当前 pin（`beebae2` 及以上）的状态**。
 
 ### 2.4 启动训练
 
