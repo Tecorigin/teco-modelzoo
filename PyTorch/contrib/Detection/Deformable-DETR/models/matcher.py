@@ -85,12 +85,15 @@ class HungarianMatcher(nn.Module):
             cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
 
             # Compute the giou cost betwen boxes
-            cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox),
-                                             box_cxcywh_to_xyxy(tgt_bbox))
+            # c35: dispatch the bbox/giou block on the HOST CPU -- the same util.box_ops calls on
+            # the same fp32 values/order, so the cost matrix values are unchanged, while ~70
+            # vendor dispatches per matcher call disappear.
+            cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox.cpu()),
+                                             box_cxcywh_to_xyxy(tgt_bbox.cpu()))
 
             # Final cost matrix
-            C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
-            C = C.view(bs, num_queries, -1).cpu()
+            C = self.cost_bbox * cost_bbox.cpu() + self.cost_class * cost_class.cpu() + self.cost_giou * cost_giou
+            C = C.view(bs, num_queries, -1)
 
             sizes = [len(v["boxes"]) for v in targets]
             indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
